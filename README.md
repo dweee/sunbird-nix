@@ -52,6 +52,22 @@ in
 
 Quick test: `nix run .` (Sunbird) / `nix run .#gate-only` / `nix run .#phoenix`.
 
+## Apple Silicon
+
+`packages.aarch64-darwin.phoenix` contains the signed Discord Phoenix 2233
+application in `Applications/Discord Phoenix.app`. Build with
+`nix build .#phoenix` or launch with `nix run .#phoenix`. You need an account
+with access to Phoenix. This output ships the stock client with Discord's
+original signature and access checks.
+
+The archive follows the ARM64 client linked by Sunbird and uses the
+`Discord Phoenix.app` layout identified in [Sunbird PR #67][macos-pr].
+`sources-darwin.json` pins the archive separately from the Linux loader's
+update schedule. The Nix build verifies the bundle and Discord signing
+identity before producing the output.
+
+[macos-pr]: https://github.com/sunbird-tools/sunbird/pull/67
+
 ## How the preload works
 
 `sunbird` exports `SUNBIRD_PRELOAD=<loader>` and `SUNBIRD_GATE_ONLY=1` for the gate-only entry, then runs `phoenix`. The FHS env's `/etc/profile` turns `SUNBIRD_PRELOAD` into `LD_PRELOAD` inside the bubblewrap sandbox, so the loader is not injected into bwrap or the outer wrapper. The sandbox also provides what the loader calls at runtime: `libcurl.so.4`, python3 + PyGObject + Ayatana AppIndicator (tray), zenity/kdialog (plugin file picker), wl-copy/xclip/xsel, notify-send, xdg-open.

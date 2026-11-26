@@ -1,17 +1,22 @@
 {
-  description = "Phoenix (desktop build 2233) with the Sunbird loader, packaged for NixOS";
+  description = "Phoenix desktop for Nix, with the Sunbird loader on x86-64 Linux";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
   outputs =
     { self, nixpkgs }:
     let
-      system = "x86_64-linux"; # Phoenix only ships linux-x64
+      system = "x86_64-linux"; # Sunbird loader for the Linux package
       pkgs = import nixpkgs {
         inherit system;
         config.allowUnfree = true; # Phoenix and the Sunbird loader are unfree binaries
       };
       sources = builtins.fromJSON (builtins.readFile ./sources.json);
+      darwinSystem = "aarch64-darwin";
+      darwinPkgs = import nixpkgs {
+        system = darwinSystem;
+        config.allowUnfree = true;
+      };
     in
     {
       packages.${system} = rec {
@@ -20,6 +25,15 @@
         sunbird = pkgs.callPackage ./pkgs/sunbird.nix { inherit phoenix sunbird-loader; };
         sunbird-mutable = sunbird.override { loaderMode = "mutable"; };
         default = sunbird;
+      };
+
+      packages.${darwinSystem}.phoenix = darwinPkgs.callPackage ./pkgs/phoenix-darwin.nix {
+        source = builtins.fromJSON (builtins.readFile ./sources-darwin.json);
+      };
+
+      apps.${darwinSystem}.phoenix = {
+        type = "app";
+        program = "${self.packages.${darwinSystem}.phoenix}/bin/phoenix";
       };
 
       apps.${system} = {
