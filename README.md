@@ -67,7 +67,7 @@ Nothing binary lives in this repo. `sources.json` holds URLs and hashes; Nix dow
 - Phoenix: build number, URL and SHA-256 come from the sunbird.tools page. The file itself comes from a separate mirror, so Nix checks one source against the other.
 - Loader: Sunbird publishes no hash, so the script downloads it once and hashes it (trust on first use).
 
-`.github/workflows/update.yml` runs this every 2 hours, verifies by fetching through Nix, and opens a PR touching only `sources.json`.
+`.github/workflows/update.yml` runs this every 30 minutes, verifies by fetching through Nix, and opens a PR touching only `sources.json`.
 
 ## Known limits
 

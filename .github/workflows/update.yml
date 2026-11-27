@@ -6,7 +6,7 @@ name: update sources
 
 on:
   schedule:
-    - cron: "17 */2 * * *" # every 2 hours; the loader changes often
+    - cron: "17,47 * * * *" # every 30 minutes, away from the start of the hour
   workflow_dispatch:
 
 permissions:
