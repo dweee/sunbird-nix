@@ -1,5 +1,15 @@
 {
-  "version": "2233",
-  "url": "https://dl.redeem.saarland/desktop/2233/macos-arm64.zip",
-  "hash": "sha256-Bpxj44G7QaJTlGgSlJuNf64J5Dvj+GZGbPvZ21PUP2g="
+  "phoenix": {
+    "version": "2233",
+    "url": "https://dl.redeem.saarland/desktop/2233/macos-arm64.zip",
+    "hash": "sha256-Bpxj44G7QaJTlGgSlJuNf64J5Dvj+GZGbPvZ21PUP2g="
+  },
+  "loader": {
+    "version": "2026.11.26.2334-423f78a",
+    "owner": "cocomeshy",
+    "repo": "sunbird",
+    "rev": "423f78ae10378548369ce925433c4cea137204f1",
+    "hash": "sha256-bkPT0ygd3x6StRdjG7yUckzTbiOvzKh35kzKp1AHbsA=",
+    "sunhookHash": "sha256-wlIWAj8A5tiJy/fY7SJHVh4g4FgE9QPxFxBDNgfW/14="
+  }
 }

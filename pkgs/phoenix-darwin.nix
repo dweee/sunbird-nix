@@ -2,9 +2,12 @@
   lib,
   stdenvNoCC,
   fetchurl,
-  source,
+  sources,
 }:
 
+let
+  source = sources.phoenix;
+in
 stdenvNoCC.mkDerivation {
   pname = "phoenix";
   inherit (source) version;
