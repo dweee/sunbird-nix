@@ -76,13 +76,14 @@ On macOS, `Discord Phoenix.app` ships with the hardened runtime, which ignores `
 Nothing binary lives in this repo. `sources.json` holds URLs and hashes for Linux; `sources-darwin.json` holds the macOS Phoenix archive and PR #67 loader source pin. Nix fetches everything at build time.
 
 ```sh
-./update.sh   # scrape sunbird.tools + version.json, rewrite sources.json if anything changed
+./update.sh   # scrape sunbird.tools + version.json + PR #67, rewrite sources*.json if anything changed
 ```
 
-- Phoenix: build number, URL and SHA-256 come from the sunbird.tools page. The file itself comes from a separate mirror, so Nix checks one source against the other.
+- Phoenix: build number, URL and SHA-256 come from the sunbird.tools page for both Linux and Apple Silicon. The files themselves come from a separate mirror, so Nix checks one source against the other.
 - Loader (Linux): Sunbird publishes no hash, so the script downloads it once and hashes it (trust on first use).
+- Loader (Apple Silicon): tracks [Sunbird PR #67][macos-pr] (and falls over to `sunbird-tools/sunbird` `main` once merged), prefetching the source archive and `sunhook-sys` git dependency hash from `Cargo.lock`.
 
-`.github/workflows/update.yml` runs this every 30 minutes, verifies by fetching through Nix, and opens a PR touching only `sources.json`.
+`.github/workflows/update.yml` runs this every 30 minutes, verifies the updated hashes through Nix, and opens a PR touching only `sources.json` and/or `sources-darwin.json`.
 
 ## Known limits
 

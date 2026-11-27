@@ -1,8 +1,9 @@
 name: update sources
 
-# Checks sunbird.tools and assets.sunbird.tools for a new Phoenix build or
-# loader, verifies the hashes by fetching through Nix, and opens a PR that
-# changes sources.json only. No binaries are committed or uploaded.
+# Checks sunbird.tools, assets.sunbird.tools, and upstream macOS PR #67 for a
+# new Phoenix build or loader, verifies hashes through Nix, and opens a PR
+# touching only sources.json and/or sources-darwin.json. No binaries are
+# committed or uploaded.
 
 on:
   schedule:
@@ -22,16 +23,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Refresh sources.json
+      - name: Refresh sources
         id: update
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          out=$(nix shell nixpkgs#curl nixpkgs#jq nixpkgs#python3 -c bash ./update.sh)
+          out=$(nix shell nixpkgs#curl nixpkgs#jq nixpkgs#python3 nixpkgs#git -c bash ./update.sh)
           echo "$out"
           {
             echo 'summary<<EOF'
@@ -40,22 +45,85 @@ jobs:
           } >>"$GITHUB_OUTPUT"
           if [ "$out" = unchanged ]; then
             echo changed=false >>"$GITHUB_OUTPUT"
+            echo linux_changed=false >>"$GITHUB_OUTPUT"
+            echo darwin_changed=false >>"$GITHUB_OUTPUT"
           else
             echo changed=true >>"$GITHUB_OUTPUT"
-            echo "phoenix=$(jq -r .phoenix.version sources.json)" >>"$GITHUB_OUTPUT"
-            echo "loader=$(jq -r .loader.version sources.json)" >>"$GITHUB_OUTPUT"
+            if git diff --quiet -- sources.json; then
+              linux_changed=false
+            else
+              linux_changed=true
+            fi
+            if git diff --quiet -- sources-darwin.json; then
+              darwin_changed=false
+            else
+              darwin_changed=true
+            fi
+            echo "linux_changed=$linux_changed" >>"$GITHUB_OUTPUT"
+            echo "darwin_changed=$darwin_changed" >>"$GITHUB_OUTPUT"
+
+            parts=()
+            if [ "$linux_changed" = true ]; then
+              parts+=("phoenix $(jq -r .phoenix.version sources.json)")
+              parts+=("loader $(jq -r .loader.version sources.json)")
+            fi
+            if [ "$darwin_changed" = true ]; then
+              if [ "$linux_changed" = false ]; then
+                parts+=("phoenix $(jq -r .phoenix.version sources-darwin.json)")
+              fi
+              parts+=("darwin $(jq -r .loader.version sources-darwin.json)")
+            fi
+            title="sources: $(printf '%s' "${parts[0]}"; printf ', %s' "${parts[@]:1}")"
+            echo "title=$title" >>"$GITHUB_OUTPUT"
           fi
 
       # Fetching through Nix checks the files against the new hashes. The
-      # AppImage (~390 MB) is only downloaded when the Phoenix build changed.
+      # Phoenix archives (~250-390 MB) are only downloaded when their build
+      # changes. Darwin hashes are verified using x86_64-linux fixed-output
+      # fetchers so this job stays on ubuntu-latest.
       - name: Verify
         if: steps.update.outputs.changed == 'true'
         run: |
-          nix build --no-link .#sunbird-loader
-          if [ "$(git show HEAD:sources.json | jq -c .phoenix)" != "$(jq -c .phoenix sources.json)" ]; then
-            nix build --no-link .#phoenix.src
+          if [ "${{ steps.update.outputs.linux_changed }}" = true ]; then
+            nix build --no-link .#sunbird-loader
+            if [ "$(git show HEAD:sources.json | jq -c .phoenix)" != "$(jq -c .phoenix sources.json)" ]; then
+              nix build --no-link .#phoenix.src
+            fi
           fi
-          nix flake check --no-build
+          if [ "${{ steps.update.outputs.darwin_changed }}" = true ]; then
+            nix build --no-link --impure --expr '
+              let
+                flake = builtins.getFlake ("path:" + toString ./.);
+                pkgs = import flake.inputs.nixpkgs { system = builtins.currentSystem; };
+                s = builtins.fromJSON (builtins.readFile ./sources-darwin.json);
+                src = pkgs.fetchFromGitHub {
+                  inherit (s.loader) owner repo rev hash;
+                };
+                cargoDeps = pkgs.rustPlatform.importCargoLock {
+                  lockFile = "${src}/Cargo.lock";
+                  outputHashes = {
+                    "sunhook-sys-0.1.0" = s.loader.sunhookHash;
+                  };
+                };
+              in pkgs.linkFarm "verify-darwin-sources" [
+                { name = "src"; path = src; }
+                { name = "cargoDeps"; path = cargoDeps; }
+              ]
+            '
+            if [ "$(git show HEAD:sources-darwin.json | jq -c .phoenix)" != "$(jq -c .phoenix sources-darwin.json)" ]; then
+              nix build --no-link --impure --expr '
+                let
+                  flake = builtins.getFlake ("path:" + toString ./.);
+                  pkgs = import flake.inputs.nixpkgs { system = builtins.currentSystem; };
+                  s = (builtins.fromJSON (builtins.readFile ./sources-darwin.json)).phoenix;
+                in pkgs.fetchurl {
+                  inherit (s) url hash;
+                  name = "phoenix-${s.version}-arm64.zip";
+                }
+              '
+            fi
+          fi
+          nix flake check --no-build --all-systems
 
       - name: Open pull request
         if: steps.update.outputs.changed == 'true'
@@ -63,15 +131,18 @@ jobs:
         with:
           branch: update/sources
           delete-branch: true
-          commit-message: "sources: phoenix ${{ steps.update.outputs.phoenix }}, loader ${{ steps.update.outputs.loader }}"
-          title: "sources: phoenix ${{ steps.update.outputs.phoenix }}, loader ${{ steps.update.outputs.loader }}"
+          commit-message: "${{ steps.update.outputs.title }}"
+          title: "${{ steps.update.outputs.title }}"
           body: |
-            Automated bump from sunbird.tools.
+            Automated bump from sunbird.tools / upstream PR #67.
 
             ```
             ${{ steps.update.outputs.summary }}
             ```
 
-            - Phoenix hash is the one listed on sunbird.tools; Nix verified the mirror's file against it.
-            - Loader hash is trust-on-first-use (Sunbird publishes none).
-          add-paths: sources.json
+            - Phoenix hashes come from sunbird.tools; Nix verified the mirror files against them.
+            - Linux loader hash is trust-on-first-use (Sunbird publishes none).
+            - Darwin loader source and `sunhook-sys` hashes were prefetched from GitHub and verified via `fetchFromGitHub` + `importCargoLock`.
+          add-paths: |
+            sources.json
+            sources-darwin.json
